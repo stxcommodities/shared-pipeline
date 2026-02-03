@@ -1,0 +1,38 @@
+# Converted from Bitbucket Pipelines
+# Uses arc-tde-runner for GitHub Actions
+
+name: TDE Shared Pipeline
+'on':
+  workflow_call:
+    secrets:
+      SSH_KEY_TDE:
+        required: true
+jobs:
+  notify-tde:
+    runs-on: arc-tde-runner
+    steps:
+    - uses: actions/checkout@v4
+    - name: Setup SSH
+      run: |-
+        mkdir -p ~/.ssh
+        echo "${{ secrets.SSH_KEY_TDE }}" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+        ssh-keyscan -H tde-aws.stxaws.net >> ~/.ssh/known_hosts 2>/dev/null || true
+    - name: Notify TDE Server
+      run: |-
+        # Create update notification
+        echo "$(date -u +%s) git@github.com:${{ github.repository }}.git" > update_line
+
+        # Upload notification
+        scp -o StrictHostKeyChecking=no update_line bb@tde-aws.stxaws.net:/mnt/tde-in/bit-bucket/
+
+        # Append to updates file and cleanup
+        ssh -o StrictHostKeyChecking=no bb@tde-aws.stxaws.net 'cat /mnt/tde-in/bit-bucket/update_line >> /mnt/tde-in/bit-bucket_git_updates.txt && rm -f /mnt/tde-in/bit-bucket/update_line'
+
+        # Create and upload last_run marker
+        echo "${{ github.event.repository.name }}" > last_run
+        date >> last_run
+        scp -o StrictHostKeyChecking=no last_run bb@tde-aws.stxaws.net:/mnt/tde-in/bit-bucket/
+    - name: Cleanup SSH
+      if: always()
+      run: rm -f ~/.ssh/id_rsa
