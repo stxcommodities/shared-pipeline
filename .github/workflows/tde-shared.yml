@@ -7,32 +7,48 @@ name: TDE Shared Pipeline
     secrets:
       SSH_KEY_TDE:
         required: true
+  push:
+    branches:
+      - main
+      - master
+
 jobs:
-  notify-tde:
+  tde:
+    name: TDE
     runs-on: arc-tde-runner
     steps:
-    - uses: actions/checkout@v4
-    - name: Setup SSH
-      run: |-
-        mkdir -p ~/.ssh
-        echo "${{ secrets.SSH_KEY_TDE }}" > ~/.ssh/id_rsa
-        chmod 600 ~/.ssh/id_rsa
-        ssh-keyscan -H tde-aws.stxaws.net >> ~/.ssh/known_hosts 2>/dev/null || true
-    - name: Notify TDE Server
-      run: |-
-        # Create update notification
-        echo "$(date -u +%s) git@github.com:${{ github.repository }}.git" > update_line
+      - name: Checkout
+        uses: actions/checkout@v4
 
-        # Upload notification
-        scp -o StrictHostKeyChecking=no update_line bb@tde-aws.stxaws.net:/mnt/tde-in/bit-bucket/
+      - name: Create update line
+        run: |
+          echo "$(date -u +%s) git@github.com:${{ github.repository }}.git" > ${{ github.workspace }}/update_line
 
-        # Append to updates file and cleanup
-        ssh -o StrictHostKeyChecking=no bb@tde-aws.stxaws.net 'cat /mnt/tde-in/bit-bucket/update_line >> /mnt/tde-in/bit-bucket_git_updates.txt && rm -f /mnt/tde-in/bit-bucket/update_line'
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_KEY_TDE }}" > ~/.ssh/tde_key
+          chmod 600 ~/.ssh/tde_key
+          echo -e "Host datahive.online\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null" > ~/.ssh/config
 
-        # Create and upload last_run marker
-        echo "${{ github.event.repository.name }}" > last_run
-        date >> last_run
-        scp -o StrictHostKeyChecking=no last_run bb@tde-aws.stxaws.net:/mnt/tde-in/bit-bucket/
-    - name: Cleanup SSH
-      if: always()
-      run: rm -f ~/.ssh/id_rsa
+      - name: Deploy update line
+        run: |
+          scp -i ~/.ssh/tde_key ${{ github.workspace }}/update_line bb@datahive.online:/mnt/tde-in/github/
+
+      - name: Append to git updates
+        run: |
+          ssh -i ~/.ssh/tde_key bb@datahive.online "cat /mnt/tde-in/github/update_line >> /mnt/tde-in/github_git_updates.txt && rm -f /mnt/tde-in/github/update_line"
+
+      - name: Create last run file
+        run: |
+          echo "${{ github.event.repository.name }}" > ${{ github.workspace }}/last_run
+          date >> ${{ github.workspace }}/last_run
+
+      - name: Deploy last run
+        run: |
+          scp -i ~/.ssh/tde_key ${{ github.workspace }}/last_run bb@datahive.online:/mnt/tde-in/github/
+
+      - name: Cleanup SSH
+        if: always()
+        run: |
+          rm -f ~/.ssh/tde_key
