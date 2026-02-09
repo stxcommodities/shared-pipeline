@@ -33,17 +33,17 @@ jobs:
       - name: Create and deploy update line
         run: |
           echo "$(date -u +%s) git@github.com:${{ github.repository }}.git" > "${{ github.workspace }}/update_line"
-          scp "${{ github.workspace }}/update_line" bb@tde-aws.stxaws.net:/mnt/tde-in/bit-bucket/
+          scp "${{ github.workspace }}/update_line" bb@tde-aws.stxaws.net:/mnt/tde-in/github/
 
       - name: Append to git updates
         run: |
-          ssh bb@tde-aws.stxaws.net "cat /mnt/tde-in/bit-bucket/update_line >> /mnt/tde-in/bit-bucket_git_updates.txt && rm -f /mnt/tde-in/bit-bucket/update_line"
+          ssh bb@tde-aws.stxaws.net "cat /mnt/tde-in/github/update_line >> /mnt/tde-in/github_git_updates.txt && rm -f /mnt/tde-in/github/update_line"
 
       - name: Create and deploy last run
         run: |
           echo "${{ github.event.repository.name }}" > "${{ github.workspace }}/last_run"
           date >> "${{ github.workspace }}/last_run"
-          scp "${{ github.workspace }}/last_run" bb@tde-aws.stxaws.net:/mnt/tde-in/bit-bucket/
+          scp "${{ github.workspace }}/last_run" bb@tde-aws.stxaws.net:/mnt/tde-in/github/
 
       - name: Cleanup SSH
         if: always()
