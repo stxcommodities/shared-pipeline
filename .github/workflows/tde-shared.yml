@@ -1,16 +1,13 @@
-# Converted from Bitbucket Pipelines
-# Uses arc-tde-runner for GitHub Actions
+# Converted from Bitbucket Pipelines (export: true → workflow_call)
+# Equivalent of: definitions.pipelines.tde
 
 name: TDE Shared Pipeline
-'on':
+
+on:
   workflow_call:
     secrets:
       SSH_KEY_TDE:
         required: true
-  push:
-    branches:
-      - main
-      - master
 
 jobs:
   tde:
@@ -20,35 +17,34 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Create update line
-        run: |
-          echo "$(date -u +%s) git@github.com:${{ github.repository }}.git" > ${{ github.workspace }}/update_line
-
       - name: Setup SSH
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_KEY_TDE }}" > ~/.ssh/tde_key
           chmod 600 ~/.ssh/tde_key
-          echo -e "Host datahive.online\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null" > ~/.ssh/config
+          cat >> ~/.ssh/config <<'EOF'
+          Host tde-aws.stxaws.net
+            StrictHostKeyChecking no
+            UserKnownHostsFile /dev/null
+            IdentityFile ~/.ssh/tde_key
+          EOF
+          chmod 600 ~/.ssh/config
 
-      - name: Deploy update line
+      - name: Create and deploy update line
         run: |
-          scp -i ~/.ssh/tde_key ${{ github.workspace }}/update_line bb@datahive.online:/mnt/tde-in/github/
+          echo "$(date -u +%s) git@github.com:${{ github.repository }}.git" > "${{ github.workspace }}/update_line"
+          scp "${{ github.workspace }}/update_line" bb@tde-aws.stxaws.net:/mnt/tde-in/bit-bucket/
 
       - name: Append to git updates
         run: |
-          ssh -i ~/.ssh/tde_key bb@datahive.online "cat /mnt/tde-in/github/update_line >> /mnt/tde-in/github_git_updates.txt && rm -f /mnt/tde-in/github/update_line"
+          ssh bb@tde-aws.stxaws.net "cat /mnt/tde-in/bit-bucket/update_line >> /mnt/tde-in/bit-bucket_git_updates.txt && rm -f /mnt/tde-in/bit-bucket/update_line"
 
-      - name: Create last run file
+      - name: Create and deploy last run
         run: |
-          echo "${{ github.event.repository.name }}" > ${{ github.workspace }}/last_run
-          date >> ${{ github.workspace }}/last_run
-
-      - name: Deploy last run
-        run: |
-          scp -i ~/.ssh/tde_key ${{ github.workspace }}/last_run bb@datahive.online:/mnt/tde-in/github/
+          echo "${{ github.event.repository.name }}" > "${{ github.workspace }}/last_run"
+          date >> "${{ github.workspace }}/last_run"
+          scp "${{ github.workspace }}/last_run" bb@tde-aws.stxaws.net:/mnt/tde-in/bit-bucket/
 
       - name: Cleanup SSH
         if: always()
-        run: |
-          rm -f ~/.ssh/tde_key
+        run: rm -f ~/.ssh/tde_key ~/.ssh/config
